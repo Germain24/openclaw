@@ -1,14 +1,16 @@
 import type { OpenClawConfig } from "../config/config.js";
 import { coerceSecretRef, resolveSecretInputRef } from "../config/types.secrets.js";
 import { normalizeOptionalSecretInput } from "../utils/normalize-secret-input.js";
-import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
+import { listProfilesForProvider } from "./auth-profiles/profiles.js";
+import { ensureAuthProfileStore } from "./auth-profiles/store.js";
+import { resolveEnvApiKey } from "./model-auth-env.js";
 import {
   isNonSecretApiKeyMarker,
   resolveEnvSecretRefHeaderValueMarker,
   resolveNonEnvSecretRefApiKeyMarker,
   resolveNonEnvSecretRefHeaderValueMarker,
 } from "./model-auth-markers.js";
-import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
+import { resolveAwsSdkEnvVarName } from "./model-auth-runtime-shared.js";
 
 type ModelsConfig = NonNullable<OpenClawConfig["models"]>;
 export type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
@@ -324,16 +326,6 @@ export function createProviderAuthResolver(
   authStore: ReturnType<typeof ensureAuthProfileStore>,
 ): ProviderAuthResolver {
   return (provider: string, options?: { oauthMarker?: string }) => {
-    const envVar = resolveEnvApiKeyVarName(provider, env);
-    if (envVar) {
-      return {
-        apiKey: envVar,
-        discoveryApiKey: toDiscoveryApiKey(env[envVar]),
-        mode: "api_key" as const,
-        source: "env" as const,
-      };
-    }
-
     const ids = listProfilesForProvider(authStore, provider);
     let oauthCandidate:
       | {
@@ -373,6 +365,16 @@ export function createProviderAuthResolver(
     }
     if (oauthCandidate) {
       return oauthCandidate;
+    }
+
+    const envVar = resolveEnvApiKeyVarName(provider, env);
+    if (envVar) {
+      return {
+        apiKey: envVar,
+        discoveryApiKey: toDiscoveryApiKey(env[envVar]),
+        mode: "api_key" as const,
+        source: "env" as const,
+      };
     }
 
     return {
